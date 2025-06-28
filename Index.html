@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalShield Advanced Bonus Calculator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="p-4 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-gray-200">
+        <h1 class="text-2xl md:text-3xl font-bold text-center text-indigo-700 mb-6">LegalShield Bonus Calculator</h1>
+        <p class="text-gray-600 text-sm text-center mb-6">
+            Calculate potential bonuses for multiple individuals and scenarios based on the "Advance to Manager" incentive,
+            including cumulative bonuses for upline roles.
+        </p>
+
+        <div id="entriesContainer" class="space-y-6 mb-6">
+            <!-- Dynamic entries will be added here -->
+        </div>
+
+        <button id="addEntryBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 mb-6">
+            Add Another Scenario
+        </button>
+
+        <button id="calculateTotalBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75">
+            Calculate Total Bonus
+        </button>
+
+        <div id="resultDisplay" class="mt-8 p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-center hidden">
+            <h2 class="text-xl font-semibold text-indigo-800 mb-2">Total Estimated Bonus:</h2>
+            <p id="totalBonusAmount" class="text-5xl font-extrabold text-indigo-700 mb-4">$0</p>
+            <div id="scenarioBreakdown" class="text-sm text-gray-700 text-left mb-3"></div>
+        </div>
+
+        <div id="errorMessage" class="mt-8 p-4 bg-red-100 border border-red-300 text-red-700 rounded-lg text-center hidden">
+            Please ensure all fields in added scenarios are selected and quantity is a valid number.
+        </div>
+
+        <div class="mt-8 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Important General Conditions:</h3>
+            <ul id="generalNotes" class="list-disc list-inside text-sm text-gray-600 space-y-1"></ul>
+        </div>
+    </div>
+
+    <script>
+        // Define bonus data based on the PDF content
+        const bonuses = {
+            "Sr. Associate": {
+                "Qualifier": 400,
+                "Sponsor": 100,
+                "Upline Sr. Director": 200,
+                "Upline Exec. Director": 200,
+                "Upline Platinum": 100
+            },
+            "Manager": {
+                "Qualifier": 500,
+                "Sponsor": 200,
+                "Upline Sr. Director": 400,
+                "Upline Exec. Director": 400,
+                "Upline Platinum": 200
+            }
+        };
+
+        // Helper function to get bonus for a specific level and role, defaults to 0 if not found
+        function getBonus(level, role) {
+            return bonuses[level] ? (bonuses[level][role] || 0) : 0;
+        }
+
+        // General conditions applicable to all bonuses
+        const generalConditions = [
+            "All qualifying associates must have an active LegalShield Advantage or Advantage Plus subscription.",
+            "Associates assigned or placed at a level are not eligible for upline bonuses.",
+            "To receive any upline bonus, the associate must have a previous month-end organizational retention rate of 65% or higher.",
+            "All bonuses will be held for 5 business days for a business review and can be held up to 60 days for retention review if cancels or precancels are higher than company average.",
+            "All associates must be in good standing with the company to receive incentives."
+        ];
+
+        // Get DOM elements
+        const entriesContainer = document.getElementById('entriesContainer');
+        const addEntryBtn = document.getElementById('addEntryBtn');
+        const calculateTotalBtn = document.getElementById('calculateTotalBtn');
+        const resultDisplay = document.getElementById('resultDisplay');
+        const totalBonusAmount = document.getElementById('totalBonusAmount');
+        const scenarioBreakdown = document.getElementById('scenarioBreakdown');
+        const errorMessage = document.getElementById('errorMessage');
+        const generalNotesList = document.getElementById('generalNotes');
+
+        let entryCount = 0; // To uniquely identify each entry
+
+        // Function to create and add a new scenario entry
+        function addScenarioEntry() {
+            entryCount++;
+            const entryId = `entry-${entryCount}`;
+
+            const entryDiv = document.createElement('div');
+            entryDiv.id = entryId;
+            entryDiv.className = 'p-4 border border-gray-300 rounded-lg bg-gray-50 shadow-sm relative group';
+
+            entryDiv.innerHTML = `
+                <button type="button" class="remove-entry-btn absolute top-2 right-2 text-red-500 hover:text-red-700 text-xl font-bold focus:outline-none" aria-label="Remove scenario">&times;</button>
+                <h4 class="text-md font-semibold text-gray-700 mb-3">Scenario ${entryCount}</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="levelSelect-${entryCount}" class="block text-gray-700 text-sm font-medium mb-2">Achievement Level:</label>
+                        <select id="levelSelect-${entryCount}" class="block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out bg-white text-gray-800">
+                            <option value="">-- Select Level --</option>
+                            <option value="Sr. Associate">Sr. Associate (20 Days)</option>
+                            <option value="Manager">Manager (45 Days)</option>
+                            <option value="Both Levels">Both Levels (Total Payout)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="roleSelect-${entryCount}" class="block text-gray-700 text-sm font-medium mb-2">Your Role:</label>
+                        <select id="roleSelect-${entryCount}" class="block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out bg-white text-gray-800">
+                            <option value="">-- Select Role --</option>
+                            <option value="Qualifier">Qualifier</option>
+                            <option value="Sponsor">Sponsor</option>
+                            <option value="Upline Sr. Director">Upline Sr. Director</option>
+                            <option value="Upline Exec. Director">Upline Exec. Director</option>
+                            <option value="Upline Platinum">Upline Platinum</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label for="quantity-${entryCount}" class="block text-gray-700 text-sm font-medium mb-2">Number of People (Quantity):</label>
+                    <input type="number" id="quantity-${entryCount}" value="1" min="1" class="block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out text-gray-800">
+                </div>
+
+                <!-- Optional cumulative bonus fields -->
+                <div id="cumulativeOptions-${entryCount}" class="mt-4 space-y-3">
+                    <div id="isSponsorContainer-${entryCount}" class="hidden">
+                        <label class="inline-flex items-center text-gray-700 text-sm font-medium">
+                            <input type="checkbox" id="isSponsor-${entryCount}" class="form-checkbox h-4 w-4 text-indigo-600 rounded-md focus:ring-indigo-500">
+                            <span class="ml-2">Is this person also the Sponsor?</span>
+                        </label>
+                    </div>
+
+                    <div id="missingUplinesContainer-${entryCount}" class="hidden">
+                        <label for="missingUplines-${entryCount}" class="block text-gray-700 text-sm font-medium mb-2">Missing Upline Levels:</label>
+                        <select id="missingUplines-${entryCount}" class="block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out bg-white text-gray-800">
+                            <option value="">-- None Missing --</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            entriesContainer.appendChild(entryDiv);
+
+            // Get references to the new elements
+            const levelSelect = document.getElementById(`levelSelect-${entryCount}`);
+            const roleSelect = document.getElementById(`roleSelect-${entryCount}`);
+            const quantityInput = document.getElementById(`quantity-${entryCount}`);
+            const isSponsorContainer = document.getElementById(`isSponsorContainer-${entryCount}`);
+            const isSponsorCheckbox = document.getElementById(`isSponsor-${entryCount}`);
+            const missingUplinesContainer = document.getElementById(`missingUplinesContainer-${entryCount}`);
+            const missingUplinesSelect = document.getElementById(`missingUplines-${entryCount}`);
+            const removeEntryBtn = entryDiv.querySelector('.remove-entry-btn');
+
+            // Function to update visibility of cumulative options
+            const updateCumulativeOptions = () => {
+                const currentRole = roleSelect.value;
+                isSponsorContainer.classList.add('hidden');
+                isSponsorCheckbox.checked = false; // Reset checkbox
+                missingUplinesContainer.classList.add('hidden');
+                missingUplinesSelect.innerHTML = '<option value="">-- None Missing --</option>'; // Reset options
+
+                if (['Upline Sr. Director', 'Upline Exec. Director', 'Upline Platinum'].includes(currentRole)) {
+                    isSponsorContainer.classList.remove('hidden');
+                }
+
+                if (currentRole === 'Upline Exec. Director') {
+                    missingUplinesContainer.classList.remove('hidden');
+                    missingUplinesSelect.innerHTML += '<option value="Missing Sr. Director">Missing Sr. Director</option>';
+                } else if (currentRole === 'Upline Platinum') {
+                    missingUplinesContainer.classList.remove('hidden');
+                    missingUplinesSelect.innerHTML += `
+                        <option value="Missing Sr. Director">Missing Sr. Director</option>
+                        <option value="Missing Exec. Director">Missing Exec. Director</option>
+                        <option value="Missing Both">Missing Both (Sr. Director & Exec. Director)</option>
+                    `;
+                }
+                calculateTotalBonus(); // Recalculate if options visibility changes
+            };
+
+            // Add event listeners for new elements
+            levelSelect.addEventListener('change', calculateTotalBonus);
+            roleSelect.addEventListener('change', updateCumulativeOptions); // Update cumulative options on role change
+            quantityInput.addEventListener('input', calculateTotalBonus);
+            isSponsorCheckbox.addEventListener('change', calculateTotalBonus);
+            missingUplinesSelect.addEventListener('change', calculateTotalBonus);
+            removeEntryBtn.addEventListener('click', () => {
+                entryDiv.remove();
+                calculateTotalBonus(); // Recalculate total if an entry is removed
+            });
+
+            // Initial update for the first entry
+            updateCumulativeOptions();
+        }
+
+        // Function to calculate and display total bonus
+        function calculateTotalBonus() {
+            let totalBonus = 0;
+            let breakdownHtml = '<h3 class="font-bold mb-2 text-indigo-700">Bonus Breakdown:</h3><ul class="list-disc list-inside space-y-1">';
+            let allValid = true;
+
+            const entryDivs = entriesContainer.querySelectorAll('[id^="entry-"]');
+            if (entryDivs.length === 0) {
+                resultDisplay.classList.add('hidden');
+                errorMessage.classList.add('hidden');
+                totalBonusAmount.textContent = "$0";
+                scenarioBreakdown.innerHTML = '';
+                return;
+            }
+
+            entryDivs.forEach((entryDiv, index) => {
+                const levelSelect = entryDiv.querySelector('select[id^="levelSelect-"]');
+                const roleSelect = entryDiv.querySelector('select[id^="roleSelect-"]');
+                const quantityInput = entryDiv.querySelector('input[id^="quantity-"]');
+                const isSponsorCheckbox = entryDiv.querySelector('input[id^="isSponsor-"]');
+                const missingUplinesSelect = entryDiv.querySelector('select[id^="missingUplines-"]');
+
+                const selectedLevel = levelSelect.value;
+                const selectedRole = roleSelect.value;
+                const quantity = parseInt(quantityInput.value, 10);
+                const isAlsoSponsor = isSponsorCheckbox ? isSponsorCheckbox.checked : false;
+                const missingUplineOption = missingUplinesSelect ? missingUplinesSelect.value : '';
+
+                if (!selectedLevel || !selectedRole || isNaN(quantity) || quantity < 1) {
+                    allValid = false;
+                    return; 
+                }
+
+                let bonusForSinglePerson = 0;
+                let breakdownParts = []; // Array to hold parts of the breakdown for clarity
+                
+                // Calculate base bonuses based on selected level and role
+                let srAssociateBase = getBonus("Sr. Associate", selectedRole);
+                let managerBase = getBonus("Manager", selectedRole);
+
+                if (selectedLevel === "Both Levels") {
+                    bonusForSinglePerson = srAssociateBase + managerBase;
+                    breakdownParts.push(`($${srAssociateBase} Sr. Associate + $${managerBase} Manager)`);
+                } else {
+                    bonusForSinglePerson = getBonus(selectedLevel, selectedRole);
+                    breakdownParts.push(`($${bonusForSinglePerson} ${selectedLevel})`);
+                }
+
+                // Add Sponsor bonus if applicable
+                if (isAlsoSponsor) {
+                    let sponsorBonusAmount = 0;
+                    if (selectedLevel === "Both Levels") {
+                        sponsorBonusAmount = getBonus("Sr. Associate", "Sponsor") + getBonus("Manager", "Sponsor");
+                    } else {
+                        sponsorBonusAmount = getBonus(selectedLevel, "Sponsor");
+                    }
+                    bonusForSinglePerson += sponsorBonusAmount;
+                    breakdownParts.push(`($${sponsorBonusAmount} Sponsor)`);
+                }
+
+                // Add Missing Upline bonuses if applicable
+                if (missingUplineOption) {
+                    let cumulativeMissingBonus = 0;
+                    let missingBreakdownDetails = [];
+
+                    if (selectedLevel === "Both Levels") {
+                        if (missingUplineOption.includes("Sr. Director") || missingUplineOption === "Missing Both") { // Added check for "Missing Both"
+                            const srDirBonusBothLevels = getBonus("Sr. Associate", "Upline Sr. Director") + getBonus("Manager", "Upline Sr. Director");
+                            cumulativeMissingBonus += srDirBonusBothLevels;
+                            missingBreakdownDetails.push(`$${srDirBonusBothLevels} Missing Sr. Director`);
+                        }
+                        if (missingUplineOption.includes("Exec. Director") || missingUplineOption === "Missing Both") { // Added check for "Missing Both"
+                            const execDirBonusBothLevels = getBonus("Sr. Associate", "Upline Exec. Director") + getBonus("Manager", "Upline Exec. Director");
+                            cumulativeMissingBonus += execDirBonusBothLevels;
+                            missingBreakdownDetails.push(`$${execDirBonusBothLevels} Missing Exec. Director`);
+                        }
+                    } else { // Single level selected
+                        if (missingUplineOption.includes("Sr. Director")) {
+                            const srDirBonusSingleLevel = getBonus(selectedLevel, "Upline Sr. Director");
+                            cumulativeMissingBonus += srDirBonusSingleLevel;
+                            missingBreakdownDetails.push(`$${srDirBonusSingleLevel} Missing Sr. Director`);
+                        }
+                        if (missingUplineOption.includes("Exec. Director")) {
+                            const execDirBonusSingleLevel = getBonus(selectedLevel, "Upline Exec. Director");
+                            cumulativeMissingBonus += execDirBonusSingleLevel;
+                            missingBreakdownDetails.push(`$${execDirBonusSingleLevel} Missing Exec. Director`);
+                        }
+                    }
+                    bonusForSinglePerson += cumulativeMissingBonus;
+                    if (missingBreakdownDetails.length > 0) {
+                        breakdownParts.push(`(${missingBreakdownDetails.join(' + ')})`);
+                    }
+                }
+
+                const totalBonusForScenario = bonusForSinglePerson * quantity;
+                totalBonus += totalBonusForScenario;
+
+                // Construct the simpler breakdown string
+                let quantityText = quantity === 1 ? "1 person" : `${quantity} people`;
+                breakdownHtml += `<li>Scenario ${index + 1} (${quantityText}): ${selectedLevel} - ${selectedRole} `;
+                if (breakdownParts.length > 0) {
+                    breakdownHtml += breakdownParts.join(' + ');
+                }
+                breakdownHtml += ` = <strong>$${bonusForSinglePerson} per person * ${quantity} = $${totalBonusForScenario}</strong></li>`;
+            });
+
+            if (!allValid) {
+                errorMessage.classList.remove('hidden');
+                resultDisplay.classList.add('hidden');
+            } else {
+                errorMessage.classList.add('hidden');
+                totalBonusAmount.textContent = `$${totalBonus}`;
+                breakdownHtml += '</ul>';
+                scenarioBreakdown.innerHTML = breakdownHtml;
+                resultDisplay.classList.remove('hidden');
+            }
+        }
+
+        // Populate general conditions
+        generalConditions.forEach(condition => {
+            const li = document.createElement('li');
+            li.textContent = condition;
+            generalNotesList.appendChild(li);
+        });
+
+        // Add initial scenario entry
+        addScenarioEntry();
+
+        // Event listeners
+        addEntryBtn.addEventListener('click', addScenarioEntry);
+        calculateTotalBtn.addEventListener('click', calculateTotalBonus);
+    </script>
+</body>
+</html>
